@@ -1,0 +1,19 @@
+# Enlock Chat - Python Dependencies
+# 
+# Web Framework
+Flask==2.3.3
+
+# Production WSGI Server (optional for deployment)
+gunicorn==21.2.0
+
+# Security and Utilities
+Werkzeug==2.3.7
+
+# For production deployment (optional)
+python-dotenv==1.0.0
+
+# Development dependencies (optional)
+# Uncomment for development environment
+# flask-cors==4.0.0
+# pytest==7.4.2
+# pytest-flask==1.2.0
