@@ -4897,7 +4897,7 @@
             } else if (currentChatUser) {
                 authorName = currentChatUser.displayName || currentChatUser.username || 'Unknown User';
             }
-
+window.safeDecryptMessage = safeDecryptMessage;
             // Get content based on message type
             if (messageData.text || messageData.ciphertext) {
                 if (messageData.ciphertext) {
@@ -7014,7 +7014,8 @@
         };
 
         // Make safe decryption available globally
-        window.safeDecryptMessage = safeDecryptMessage;
+        
     </script>
 </body>
 </html>
+
