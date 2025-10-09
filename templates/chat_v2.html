@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureChat - Privacy-First Messaging</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .chat-sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        
+        .chat-main {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+        }
+        
+        .message-bubble {
+            max-width: 75%;
+            word-wrap: break-word;
+        }
+        
+        .my-message {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .other-message {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .online-indicator {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            border: 2px solid white;
+        }
+        
+        .search-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .chat-list-item:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .encryption-badge {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .date-separator {
+            background: rgba(255, 255, 255, 0.9);
+            color: #6b7280;
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 4px 12px;
+            border-radius: 12px;
+            margin: 16px auto;
+            text-align: center;
+            width: fit-content;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        
+        .message-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .message-actions {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 10;
+        }
+        
+        .message-container:hover .message-actions {
+            opacity: 1;
+        }
+        
+        .my-message-container .message-actions {
+            left: -40px;
+        }
+        
+        .other-message-container .message-actions {
+            right: -40px;
+        }
+        
+        .reaction-btn {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .reaction-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .emoji-picker {
+            position: absolute;
+            background: white;
+            border-radius: 24px;
+            padding: 8px 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 4px;
+            z-index: 20;
+            animation: emojiPickerFadeIn 0.2s ease;
+        }
+        
+        @keyframes emojiPickerFadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .emoji-option {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s ease;
+        }
+        
+        .emoji-option:hover {
+            background: #f3f4f6;
+            transform: scale(1.2);
+        }
+        
+        .message-reactions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 6px;
+            max-width: 300px;
+        }
+        
+        .reaction-item {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            padding: 2px 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 32px;
+            justify-content: center;
+        }
+        
+        .reaction-item:hover {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+        
+        .reaction-item.my-reaction {
+            background: rgba(102, 126, 234, 0.15);
+            border-color: rgba(102, 126, 234, 0.4);
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .reaction-count {
+            font-size: 11px;
+            font-weight: 500;
+            color: #6b7280;
+        }
+        
+        .my-reaction .reaction-count {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <!-- Authentication Screens -->
+    <div id="auth-container" class="min-h-screen flex items-center justify-center p-4">
+        <!-- Login Form -->
+        <div id="login-form" class="glass-effect rounded-2xl p-8 w-full max-w-md shadow-2xl">
+            <div class="text-center mb-8">
+                <i class="fas fa-shield-alt text-4xl text-white mb-4"></i>
+                <h1 class="text-3xl font-bold text-white mb-2">SecureChat</h1>
+                <p class="text-white/80">Privacy-first messaging platform</p>
+            </div>
+            
+            <form id="login-form-element" class="space-y-6">
+                <div>
+                    <label class="block text-white/90 text-sm font-medium mb-2">
+                        <i class="fas fa-envelope mr-2"></i>Email
+                    </label>
+                    <input type="email" id="login-email" required 
+                           class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:border-white/50 transition-colors">
+                </div>
+                
+                <div>
+                    <label class="block text-white/90 text-sm font-medium mb-2">
+                        <i class="fas fa-lock mr-2"></i>Password
+                    </label>
+                    <input type="password" id="login-password" required 
+                           class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:border-white/50 transition-colors">
+                </div>
+                
+                <button type="submit" class="w-full btn-primary py-3 rounded-lg font-medium text-white">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center">
+                <p class="text-white/80">Don't have an account? 
+                    <button id="show-signup" class="text-white underline hover:no-underline">Sign up</button>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Signup Form -->
+        <div id="signup-form" class="glass-effect rounded-2xl p-8 w-full max-w-md shadow-2xl hidden">
+            <div class="text-center mb-8">
+                <i class="fas fa-user-plus text-4xl text-white mb-4"></i>
+                <h1 class="text-3xl font-bold text-white mb-2">Join SecureChat</h1>
+                <p class="text-white/80">Create your secure account</p>
+            </div>
+            
+            <form id="signup-form-element" class="space-y-6">
+                <div>
+                    <label class="block text-white/90 text-sm font-medium mb-2">
+                        <i class="fas fa-user mr-2"></i>Display Name
+                    </label>
+                    <input type="text" id="signup-name" required 
+                           class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:border-white/50 transition-colors"
+                           placeholder="John Doe">
+                </div>
+                
+                <div>
+                    <label class="block text-white/90 text-sm font-medium mb-2">
+                        <i class="fas fa-at mr-2"></i>Username
+                    </label>
+                    <input type="text" id="signup-username" required 
+                           class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:border-white/50 transition-colors"
+                           placeholder="johndoe" pattern="[a-zA-Z0-9_]{3,20}">
+                    <small class="text-white/60">3-20 characters, letters, numbers, and underscores only</small>
+                </div>
+                
+                <div>
+                    <label class="block text-white/90 text-sm font-medium mb-2">
+                        <i class="fas fa-envelope mr-2"></i>Email
+                    </label>
+                    <input type="email" id="signup-email" required 
+                           class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:border-white/50 transition-colors">
+                </div>
+                
+                <div>
+                    <label class="block text-white/90 text-sm font-medium mb-2">
+                        <i class="fas fa-lock mr-2"></i>Password
+                    </label>
+                    <input type="password" id="signup-password" required minlength="6"
+                           class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/60 focus:outline-none focus:border-white/50 transition-colors">
+                    <small class="text-white/60">Minimum 6 characters</small>
+                </div>
+                
+                <button type="submit" class="w-full btn-primary py-3 rounded-lg font-medium text-white">
+                    <i class="fas fa-user-plus mr-2"></i>Create Account
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center">
+                <p class="text-white/80">Already have an account? 
+                    <button id="show-login" class="text-white underline hover:no-underline">Sign in</button>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Chat Interface -->
+    <div id="chat-interface" class="hidden h-screen flex">
+        <!-- Sidebar -->
+        <div class="chat-sidebar w-80 flex flex-col border-r border-gray-200">
+            <!-- Header -->
+            <div class="p-4 border-b border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="relative">
+                            <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="online-indicator"></div>
+                        </div>
+                        <div>
+                            <h3 id="current-user-name" class="font-semibold text-gray-900"></h3>
+                            <p id="current-user-email" class="text-sm text-gray-500"></p>
+                        </div>
+                    </div>
+                    <button id="logout-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+                
+                <!-- Search -->
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="search-users" placeholder="Search users..." 
+                           class="search-input w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none">
+                </div>
+            </div>
+            
+            <!-- Encryption Status -->
+            <div class="px-4 py-2 bg-green-50 border-b border-gray-200">
+                <div class="encryption-badge">
+                    <i class="fas fa-shield-alt"></i>
+                    <span id="encryption-status">End-to-End Encrypted</span>
+                </div>
+            </div>
+            
+            <!-- Search Results -->
+            <div id="search-results" class="hidden p-4 border-b border-gray-200">
+                <h4 class="font-medium text-gray-900 mb-3">Search Results</h4>
+                <div id="search-results-list" class="space-y-2"></div>
+            </div>
+            
+            <!-- Chat List -->
+            <div class="flex-1 overflow-y-auto">
+                <div class="p-4">
+                    <h4 class="font-medium text-gray-900 mb-3">Recent Chats</h4>
+                    <div id="chat-list" class="space-y-2">
+                        <!-- Chat items will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chat Area -->
+        <div class="flex-1 flex flex-col chat-main">
+            <!-- Chat Header -->
+            <div id="chat-header" class="hidden p-4 border-b border-gray-200 bg-white">
+                <div class="flex items-center space-x-3">
+                    <div class="relative">
+                        <div id="chat-user-avatar" class="w-10 h-10 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="online-indicator"></div>
+                    </div>
+                    <div>
+                        <h3 id="chat-user-name" class="font-semibold text-gray-900"></h3>
+                        <p id="chat-user-status" class="text-sm text-gray-500">Online</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Welcome Screen -->
+            <div id="welcome-screen" class="flex-1 flex items-center justify-center">
+                <div class="text-center">
+                    <i class="fas fa-comments text-6xl text-gray-300 mb-4"></i>
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-2">Welcome to SecureChat</h2>
+                    <p class="text-gray-600">Search for users to start a secure conversation</p>
+                </div>
+            </div>
+            
+            <!-- Messages Area -->
+            <div id="messages-container" class="hidden flex-1 overflow-y-auto p-4 space-y-4">
+                <!-- Messages will be populated here -->
+            </div>
+            
+            <!-- Message Input -->
+            <div id="message-input-container" class="hidden p-4 border-t border-gray-200 bg-white">
+                <form id="message-form" class="flex space-x-3">
+                    <input type="text" id="message-input" placeholder="Type your secure message..." 
+                           class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                    <button type="submit" class="btn-primary px-6 py-3 rounded-lg text-white font-medium hover:shadow-lg transition-all">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="glass-effect rounded-lg p-6 text-center">
+            <i class="fas fa-spinner fa-spin text-3xl text-white mb-4"></i>
+            <p class="text-white">Loading...</p>
+        </div>
+    </div>
+    
+    <!-- Error Modal -->
+    <div id="error-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div class="flex items-center mb-4">
+                <i class="fas fa-exclamation-triangle text-red-500 text-xl mr-3"></i>
+                <h3 class="text-lg font-semibold text-gray-900">Error</h3>
+            </div>
+            <p id="error-message" class="text-gray-700 mb-4"></p>
+            <button id="close-error" class="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase and App Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged,
+            updateProfile
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            query, 
+            addDoc, 
+            onSnapshot, 
+            orderBy, 
+            serverTimestamp,
+            setDoc,
+            doc,
+            getDoc,
+            getDocs,
+            deleteDoc,
+            where,
+            limit
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCf_A4k-fXQb2MRXaUueqLOwBbS6vBoVoo",
+            authDomain: "myautth-v8iv5q.firebaseapp.com",
+            projectId: "myautth-v8iv5q",
+            storageBucket: "myautth-v8iv5q.appspot.com",
+            messagingSenderId: "1084690987173",
+            appId: "1:1084690987173:web:484f1a74d52004a767354c"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Global variables
+        let currentUser = null;
+        let currentChatUser = null;
+        let e2eKey = null;
+        let messageListeners = new Map();
+        let reactionListeners = new Map();
+        let recentChatsListener = null;
+        
+        // Common emoji reactions (WhatsApp style)
+        const commonEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+
+        // Encryption functions
+        const algo = { name: "AES-GCM", length: 256 };
+
+        async function generateE2EKey() {
+            try {
+                if (!window.crypto || !window.crypto.subtle) {
+                    console.warn("Web Crypto API not available. Running in insecure context.");
+                    document.getElementById('encryption-status').textContent = 'Not Encrypted (HTTP)';
+                    return;
+                }
+                
+                e2eKey = await crypto.subtle.generateKey(algo, true, ["encrypt", "decrypt"]);
+                document.getElementById('encryption-status').textContent = 'End-to-End Encrypted';
+            } catch (error) {
+                console.error("Error generating key:", error);
+                document.getElementById('encryption-status').textContent = 'Encryption Error';
+            }
+        }
+
+        async function encryptMessage(plaintext) {
+            if (!e2eKey) {
+                return {
+                    ciphertext: Array.from(new TextEncoder().encode(plaintext)),
+                    iv: Array.from(new Uint8Array(12))
+                };
+            }
+            
+            const encoder = new TextEncoder();
+            const data = encoder.encode(plaintext);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: algo.name, iv: iv },
+                e2eKey,
+                data
+            );
+            
+            return {
+                ciphertext: Array.from(new Uint8Array(ciphertext)),
+                iv: Array.from(iv)
+            };
+        }
+
+        async function decryptMessage(payload) {
+            if (!e2eKey) {
+                try {
+                    const decoder = new TextDecoder();
+                    return decoder.decode(new Uint8Array(payload.ciphertext));
+                } catch (error) {
+                    return "❌ Cannot decode message";
+                }
+            }
+            
+            try {
+                const decryptedData = await crypto.subtle.decrypt(
+                    { name: algo.name, iv: new Uint8Array(payload.iv) },
+                    e2eKey,
+                    new Uint8Array(payload.ciphertext)
+                );
+                const decoder = new TextDecoder();
+                return decoder.decode(decryptedData);
+            } catch (error) {
+                console.error("Decryption failed:", error);
+                return "❌ Decryption failed";
+            }
+        }
+
+        // Utility functions
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('error-modal').classList.add('hidden');
+        }
+
+        function showLoading() {
+            document.getElementById('loading-overlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+        }
+
+        function generateChatId(user1Id, user2Id) {
+            return [user1Id, user2Id].sort().join('_');
+        }
+
+        // Date formatting utilities for message grouping
+        function formatDateGroup(date) {
+            const now = new Date();
+            const messageDate = new Date(date);
+            const diffTime = Math.abs(now - messageDate);
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            
+            // Check if it's today
+            if (messageDate.toDateString() === now.toDateString()) {
+                return 'Today';
+            }
+            
+            // Check if it's yesterday
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (messageDate.toDateString() === yesterday.toDateString()) {
+                return 'Yesterday';
+            }
+            
+            // Check if it's within the last week (show day name)
+            if (diffDays < 7) {
+                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                return dayNames[messageDate.getDay()];
+            }
+            
+            // For older messages, show full date
+            return messageDate.toLocaleDateString([], {
+                year: messageDate.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function isSameDay(date1, date2) {
+            return date1.toDateString() === date2.toDateString();
+        }
+
+        // Reaction functions
+        async function addReaction(messageId, emoji, chatId) {
+            try {
+                const reactionId = `${messageId}_${currentUser.uid}_${emoji}`;
+                await setDoc(doc(db, 'chats', chatId, 'reactions', reactionId), {
+                    messageId: messageId,
+                    userId: currentUser.uid,
+                    userName: currentUser.displayName,
+                    emoji: emoji,
+                    timestamp: serverTimestamp()
+                });
+            } catch (error) {
+                console.error('Error adding reaction:', error);
+            }
+        }
+
+        async function removeReaction(messageId, emoji, chatId) {
+            try {
+                const reactionId = `${messageId}_${currentUser.uid}_${emoji}`;
+                await deleteDoc(doc(db, 'chats', chatId, 'reactions', reactionId));
+            } catch (error) {
+                console.error('Error removing reaction:', error);
+            }
+        }
+
+        function showEmojiPicker(messageElement, messageId, chatId) {
+            // Remove any existing emoji picker
+            const existingPicker = document.querySelector('.emoji-picker');
+            if (existingPicker) {
+                existingPicker.remove();
+            }
+
+            const picker = document.createElement('div');
+            picker.className = 'emoji-picker';
+            
+            // Position the picker
+            const messageContainer = messageElement.closest('.message-container');
+            const isMyMessage = messageContainer.classList.contains('my-message-container');
+            
+            if (isMyMessage) {
+                picker.style.right = '45px';
+                picker.style.top = '50%';
+                picker.style.transform = 'translateY(-50%)';
+            } else {
+                picker.style.left = '45px';
+                picker.style.top = '50%';
+                picker.style.transform = 'translateY(-50%)';
+            }
+
+            commonEmojis.forEach(emoji => {
+                const emojiBtn = document.createElement('div');
+                emojiBtn.className = 'emoji-option';
+                emojiBtn.textContent = emoji;
+                emojiBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    await addReaction(messageId, emoji, chatId);
+                    picker.remove();
+                };
+                picker.appendChild(emojiBtn);
+            });
+
+            messageContainer.appendChild(picker);
+
+            // Close picker when clicking outside
+            setTimeout(() => {
+                document.addEventListener('click', function closePicker(e) {
+                    if (!picker.contains(e.target)) {
+                        picker.remove();
+                        document.removeEventListener('click', closePicker);
+                    }
+                });
+            }, 100);
+        }
+
+        function createReactionButton(messageElement, messageId, chatId) {
+            const reactionBtn = document.createElement('div');
+            reactionBtn.className = 'reaction-btn';
+            reactionBtn.innerHTML = '<i class="far fa-smile text-gray-600"></i>';
+            reactionBtn.onclick = (e) => {
+                e.stopPropagation();
+                showEmojiPicker(messageElement, messageId, chatId);
+            };
+            return reactionBtn;
+        }
+
+        function renderReactions(reactionsData, messageId, chatId, reactionsContainer) {
+            reactionsContainer.innerHTML = '';
+            
+            // Group reactions by emoji
+            const reactionGroups = {};
+            Object.values(reactionsData).forEach(reaction => {
+                if (!reactionGroups[reaction.emoji]) {
+                    reactionGroups[reaction.emoji] = [];
+                }
+                reactionGroups[reaction.emoji].push(reaction);
+            });
+
+            // Create reaction items
+            Object.entries(reactionGroups).forEach(([emoji, reactions]) => {
+                const reactionItem = document.createElement('div');
+                reactionItem.className = 'reaction-item';
+                
+                const hasMyReaction = reactions.some(r => r.userId === currentUser.uid);
+                if (hasMyReaction) {
+                    reactionItem.classList.add('my-reaction');
+                }
+
+                const count = reactions.length;
+                reactionItem.innerHTML = `
+                    <span>${emoji}</span>
+                    ${count > 1 ? `<span class="reaction-count">${count}</span>` : ''}
+                `;
+
+                // Add tooltip showing who reacted
+                const userNames = reactions.map(r => r.userName).join(', ');
+                reactionItem.title = userNames;
+
+                // Toggle reaction on click
+                reactionItem.onclick = async (e) => {
+                    e.stopPropagation();
+                    if (hasMyReaction) {
+                        await removeReaction(messageId, emoji, chatId);
+                    } else {
+                        await addReaction(messageId, emoji, chatId);
+                    }
+                };
+
+                reactionsContainer.appendChild(reactionItem);
+            });
+        }
+
+        // Authentication functions
+        async function handleSignup(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('signup-name').value.trim();
+            const username = document.getElementById('signup-username').value.trim().toLowerCase();
+            const email = document.getElementById('signup-email').value.trim();
+            const password = document.getElementById('signup-password').value;
+
+            if (!name || !username || !email || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+                showError('Username must be 3-20 characters and contain only letters, numbers, and underscores');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                // Check if username is already taken
+                const usernameQuery = query(
+                    collection(db, 'users'), 
+                    where('username', '==', username),
+                    limit(1)
+                );
+                const usernameSnapshot = await getDocs(usernameQuery);
+                
+                if (!usernameSnapshot.empty) {
+                    throw new Error('Username is already taken');
+                }
+
+                // Create user account
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Update profile with display name
+                await updateProfile(user, { displayName: name });
+
+                // Save user data to Firestore
+                await setDoc(doc(db, 'users', user.uid), {
+                    uid: user.uid,
+                    email: email,
+                    displayName: name,
+                    username: username,
+                    createdAt: serverTimestamp(),
+                    lastSeen: serverTimestamp(),
+                    online: true
+                });
+
+                console.log('User created successfully');
+                
+            } catch (error) {
+                console.error('Signup error:', error);
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            if (!email || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                console.log('User signed in successfully');
+            } catch (error) {
+                console.error('Login error:', error);
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function handleLogout() {
+            if (currentUser) {
+                // Update user status to offline
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    online: false,
+                    lastSeen: serverTimestamp()
+                }, { merge: true });
+            }
+            
+            await signOut(auth);
+        }
+
+        // User search functions
+        async function searchUsers(searchTerm) {
+            if (searchTerm.length < 2) {
+                document.getElementById('search-results').classList.add('hidden');
+                return;
+            }
+
+            try {
+                const searchQuery = query(
+                    collection(db, 'users'),
+                    where('username', '>=', searchTerm.toLowerCase()),
+                    where('username', '<=', searchTerm.toLowerCase() + '\uf8ff'),
+                    limit(10)
+                );
+
+                const snapshot = await getDocs(searchQuery);
+                const results = [];
+                
+                snapshot.forEach(doc => {
+                    const userData = doc.data();
+                    if (userData.uid !== currentUser.uid) {
+                        results.push(userData);
+                    }
+                });
+
+                displaySearchResults(results);
+                
+            } catch (error) {
+                console.error('Search error:', error);
+            }
+        }
+
+        function displaySearchResults(users) {
+            const resultsContainer = document.getElementById('search-results-list');
+            const searchResults = document.getElementById('search-results');
+            
+            if (users.length === 0) {
+                resultsContainer.innerHTML = '<p class="text-gray-500 text-sm">No users found</p>';
+            } else {
+                resultsContainer.innerHTML = users.map(user => `
+                    <div class="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer chat-list-item"
+                         onclick="startChat('${user.uid}', '${user.displayName}', '${user.username}', '${user.email}')">
+                        <div class="relative">
+                            <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+                                ${user.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            ${user.online ? '<div class="online-indicator"></div>' : ''}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-medium text-gray-900 truncate">${user.displayName}</h4>
+                            <p class="text-sm text-gray-500 truncate">@${user.username}</p>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            searchResults.classList.remove('hidden');
+        }
+
+        // Recent chats functions
+        async function loadRecentChats() {
+            if (!currentUser) return;
+            
+            try {
+                // Query all chats where current user is a participant
+                const chatsQuery = query(
+                    collection(db, 'chatMetadata'),
+                    where('participants', 'array-contains', currentUser.uid),
+                    orderBy('lastMessageTime', 'desc'),
+                    limit(20)
+                );
+                
+                if (recentChatsListener) {
+                    recentChatsListener();
+                }
+                
+                recentChatsListener = onSnapshot(chatsQuery, async (snapshot) => {
+                    const chatList = document.getElementById('chat-list');
+                    chatList.innerHTML = '';
+                    
+                    if (snapshot.empty) {
+                        chatList.innerHTML = '<p class="text-gray-500 text-sm p-3">No recent chats. Search for users to start chatting!</p>';
+                        return;
+                    }
+                    
+                    const chats = [];
+                    snapshot.forEach(doc => {
+                        chats.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    for (const chat of chats) {
+                        // Get the other user's ID
+                        const otherUserId = chat.participants.find(id => id !== currentUser.uid);
+                        if (!otherUserId) continue;
+                        
+                        // Get the other user's data
+                        const otherUserDoc = await getDoc(doc(db, 'users', otherUserId));
+                        if (!otherUserDoc.exists()) continue;
+                        
+                        const otherUser = otherUserDoc.data();
+                        
+                        // Decrypt the last message preview
+                        let lastMessagePreview = 'No messages yet';
+                        if (chat.lastMessage && chat.lastMessage.ciphertext) {
+                            try {
+                                lastMessagePreview = await decryptMessage({
+                                    ciphertext: chat.lastMessage.ciphertext,
+                                    iv: chat.lastMessage.iv
+                                });
+                                // Truncate long messages
+                                if (lastMessagePreview.length > 40) {
+                                    lastMessagePreview = lastMessagePreview.substring(0, 40) + '...';
+                                }
+                            } catch (error) {
+                                lastMessagePreview = 'Message unavailable';
+                            }
+                        }
+                        
+                        const timeAgo = chat.lastMessageTime ? 
+                            new Date(chat.lastMessageTime.toDate()).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            }) : '';
+                        
+                        const chatElement = document.createElement('div');
+                        chatElement.className = 'flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer chat-list-item';
+                        chatElement.onclick = () => startChat(otherUser.uid, otherUser.displayName, otherUser.username, otherUser.email);
+                        
+                        chatElement.innerHTML = `
+                            <div class="relative">
+                                <div class="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                                    ${otherUser.displayName.charAt(0).toUpperCase()}
+                                </div>
+                                ${otherUser.online ? '<div class="online-indicator"></div>' : ''}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="font-medium text-gray-900 truncate">${otherUser.displayName}</h4>
+                                    <span class="text-xs text-gray-500">${timeAgo}</span>
+                                </div>
+                                <p class="text-sm text-gray-500 truncate">@${otherUser.username}</p>
+                                <p class="text-sm text-gray-600 truncate mt-1">${lastMessagePreview}</p>
+                            </div>
+                        `;
+                        
+                        chatList.appendChild(chatElement);
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error loading recent chats:', error);
+            }
+        }
+
+        async function updateChatMetadata(otherUserId, lastMessage) {
+            const chatId = generateChatId(currentUser.uid, otherUserId);
+            
+            try {
+                await setDoc(doc(db, 'chatMetadata', chatId), {
+                    participants: [currentUser.uid, otherUserId],
+                    lastMessage: lastMessage,
+                    lastMessageTime: serverTimestamp(),
+                    lastMessageSender: currentUser.uid
+                }, { merge: true });
+            } catch (error) {
+                console.error('Error updating chat metadata:', error);
+            }
+        }
+
+        // Chat functions
+        async function startChat(userId, displayName, username, email) {
+            currentChatUser = { uid: userId, displayName, username, email };
+            
+            // Hide search results
+            document.getElementById('search-results').classList.add('hidden');
+            document.getElementById('search-users').value = '';
+            
+            // Show chat interface
+            document.getElementById('welcome-screen').classList.add('hidden');
+            document.getElementById('chat-header').classList.remove('hidden');
+            document.getElementById('messages-container').classList.remove('hidden');
+            document.getElementById('message-input-container').classList.remove('hidden');
+            
+            // Update chat header
+            document.getElementById('chat-user-name').textContent = displayName;
+            document.getElementById('chat-user-avatar').textContent = displayName.charAt(0).toUpperCase();
+            
+            // Load messages
+            loadMessages(userId);
+        }
+
+        function loadMessages(otherUserId) {
+            // Clear existing listeners
+            if (messageListeners.has(otherUserId)) {
+                messageListeners.get(otherUserId)();
+                messageListeners.delete(otherUserId);
+            }
+            if (reactionListeners.has(otherUserId)) {
+                reactionListeners.get(otherUserId)();
+                reactionListeners.delete(otherUserId);
+            }
+            
+            const chatId = generateChatId(currentUser.uid, otherUserId);
+            const messagesRef = collection(db, 'chats', chatId, 'messages');
+            const reactionsRef = collection(db, 'chats', chatId, 'reactions');
+            const q = query(messagesRef, orderBy('timestamp', 'desc'), limit(50));
+            
+            // Store reactions data
+            let reactionsData = {};
+            
+            // Listen to reactions
+            const reactionUnsubscribe = onSnapshot(reactionsRef, (snapshot) => {
+                reactionsData = {};
+                snapshot.forEach(doc => {
+                    const reaction = doc.data();
+                    if (!reactionsData[reaction.messageId]) {
+                        reactionsData[reaction.messageId] = {};
+                    }
+                    reactionsData[reaction.messageId][doc.id] = reaction;
+                });
+                
+                // Re-render reactions for all messages
+                Object.keys(reactionsData).forEach(messageId => {
+                    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+                    if (messageElement) {
+                        const reactionsContainer = messageElement.querySelector('.message-reactions');
+                        if (reactionsContainer) {
+                            renderReactions(reactionsData[messageId], messageId, chatId, reactionsContainer);
+                        }
+                    }
+                });
+            });
+            
+            // Listen to messages
+            const messageUnsubscribe = onSnapshot(q, async (snapshot) => {
+                const messagesContainer = document.getElementById('messages-container');
+                messagesContainer.innerHTML = '';
+                
+                const messages = [];
+                snapshot.forEach(doc => {
+                    messages.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Reverse to show oldest first
+                messages.reverse();
+                
+                let lastMessageDate = null;
+                
+                for (let i = 0; i < messages.length; i++) {
+                    const messageData = messages[i];
+                    const messageDate = messageData.timestamp ? new Date(messageData.timestamp.toDate()) : new Date();
+                    
+                    // Check if we need to add a date separator
+                    if (!lastMessageDate || !isSameDay(lastMessageDate, messageDate)) {
+                        const dateSeparator = document.createElement('div');
+                        dateSeparator.className = 'date-separator';
+                        dateSeparator.textContent = formatDateGroup(messageDate);
+                        messagesContainer.appendChild(dateSeparator);
+                        lastMessageDate = messageDate;
+                    }
+                    
+                    // Decrypt the message
+                    const decryptedText = await decryptMessage({
+                        ciphertext: messageData.ciphertext,
+                        iv: messageData.iv
+                    });
+                    
+                    const isMyMessage = messageData.senderId === currentUser.uid;
+                    const timestamp = messageData.timestamp ? 
+                        messageDate.toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) : 'Sending...';
+                    
+                    // Create message container
+                    const messageContainer = document.createElement('div');
+                    messageContainer.className = `message-container ${isMyMessage ? 'my-message-container' : 'other-message-container'} flex ${isMyMessage ? 'justify-end' : 'justify-start'} mb-3`;
+                    messageContainer.setAttribute('data-message-id', messageData.id);
+                    
+                    // Create message element
+                    const messageElement = document.createElement('div');
+                    messageElement.className = 'relative';
+                    
+                    messageElement.innerHTML = `
+                        <div class="message-bubble ${isMyMessage ? 'my-message' : 'other-message'} p-3 rounded-2xl shadow-sm">
+                            <div class="flex items-start space-x-2">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium mb-1 ${isMyMessage ? 'text-white/90' : 'text-gray-800'}">
+                                        ${isMyMessage ? 'You' : currentChatUser.displayName}
+                                    </p>
+                                    <p class="${isMyMessage ? 'text-white' : 'text-gray-700'}">${decryptedText}</p>
+                                    <p class="text-xs mt-2 ${isMyMessage ? 'text-white/70' : 'text-gray-500'}">${timestamp}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="message-reactions"></div>
+                    `;
+                    
+                    // Add reaction button
+                    const messageActions = document.createElement('div');
+                    messageActions.className = 'message-actions';
+                    messageActions.appendChild(createReactionButton(messageElement, messageData.id, chatId));
+                    messageElement.appendChild(messageActions);
+                    
+                    messageContainer.appendChild(messageElement);
+                    messagesContainer.appendChild(messageContainer);
+                    
+                    // Render existing reactions
+                    if (reactionsData[messageData.id]) {
+                        const reactionsContainer = messageElement.querySelector('.message-reactions');
+                        renderReactions(reactionsData[messageData.id], messageData.id, chatId, reactionsContainer);
+                    }
+                }
+                
+                // Scroll to bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            });
+            
+            messageListeners.set(otherUserId, messageUnsubscribe);
+            reactionListeners.set(otherUserId, reactionUnsubscribe);
+        }
+
+        async function sendMessage(event) {
+            event.preventDefault();
+            
+            const messageInput = document.getElementById('message-input');
+            const messageText = messageInput.value.trim();
+            
+            if (!messageText || !currentChatUser) return;
+            
+            try {
+                const { ciphertext, iv } = await encryptMessage(messageText);
+                const chatId = generateChatId(currentUser.uid, currentChatUser.uid);
+                
+                // Send the message
+                await addDoc(collection(db, 'chats', chatId, 'messages'), {
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName,
+                    senderEmail: currentUser.email,
+                    recipientId: currentChatUser.uid,
+                    ciphertext: ciphertext,
+                    iv: iv,
+                    timestamp: serverTimestamp()
+                });
+                
+                // Update chat metadata for recent chats
+                await updateChatMetadata(currentChatUser.uid, { ciphertext, iv });
+                
+                messageInput.value = '';
+                
+            } catch (error) {
+                console.error('Error sending message:', error);
+                showError('Failed to send message');
+            }
+        }
+
+        // Event listeners
+        document.getElementById('signup-form-element').addEventListener('submit', handleSignup);
+        document.getElementById('login-form-element').addEventListener('submit', handleLogin);
+        document.getElementById('logout-btn').addEventListener('click', handleLogout);
+        document.getElementById('message-form').addEventListener('submit', sendMessage);
+        document.getElementById('close-error').addEventListener('click', hideError);
+
+        document.getElementById('show-signup').addEventListener('click', () => {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('signup-form').classList.remove('hidden');
+        });
+
+        document.getElementById('show-login').addEventListener('click', () => {
+            document.getElementById('signup-form').classList.add('hidden');
+            document.getElementById('login-form').classList.remove('hidden');
+        });
+
+        // Search functionality
+        let searchTimeout;
+        document.getElementById('search-users').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchUsers(e.target.value.trim());
+            }, 300);
+        });
+
+        // Make startChat globally available
+        window.startChat = startChat;
+
+        // Authentication state observer
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                
+                // Update user online status
+                await setDoc(doc(db, 'users', user.uid), {
+                    online: true,
+                    lastSeen: serverTimestamp()
+                }, { merge: true });
+                
+                // Get user data
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                const userData = userDoc.data();
+                
+                // Update UI
+                document.getElementById('current-user-name').textContent = userData.displayName;
+                document.getElementById('current-user-email').textContent = userData.email;
+                
+                // Show chat interface
+                document.getElementById('auth-container').classList.add('hidden');
+                document.getElementById('chat-interface').classList.remove('hidden');
+                
+                // Generate encryption key
+                await generateE2EKey();
+                
+                // Load recent chats
+                await loadRecentChats();
+                
+            } else {
+                currentUser = null;
+                currentChatUser = null;
+                
+                // Clear message listeners
+                messageListeners.forEach(unsubscribe => unsubscribe());
+                messageListeners.clear();
+                
+                // Clear reaction listeners
+                reactionListeners.forEach(unsubscribe => unsubscribe());
+                reactionListeners.clear();
+                
+                // Clear recent chats listener
+                if (recentChatsListener) {
+                    recentChatsListener();
+                    recentChatsListener = null;
+                }
+                
+                // Show auth interface
+                document.getElementById('chat-interface').classList.add('hidden');
+                document.getElementById('auth-container').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

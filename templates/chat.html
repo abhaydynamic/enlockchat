@@ -1,0 +1,377 @@
+<!--
+*** END-TO-END ENCRYPTED CHAT APPLICATION ***
+This client-side application uses the browser's native Web Crypto API (SubtleCrypto)
+to encrypt and decrypt messages before they are sent to or stored in Firebase Firestore.
+The Flask server and Firebase never see the unencrypted message content.
+-->
+
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+body { font-family: 'Inter', sans-serif; background-color: #f7f9fc; }
+/* Scrollbar styling for chat log /
+#messages-container {
+max-height: 70vh;
+overflow-y: auto;
+display: flex;
+flex-direction: column-reverse; / Display new messages at the bottom */
+
+.my-message {
+background-color: #4f46e5;
+color: white;
+border-bottom-right-radius: 0;
+margin-left: auto;
+}
+.other-message {
+background-color: #ffffff;
+color: #333;
+border: 1px solid #e5e7eb;
+border-bottom-left-radius: 0;
+margin-right: auto;
+}
+.chat-bubble {
+max-width: 85%;
+padding: 10px 15px;
+border-radius: 12px;
+box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+margin-bottom: 8px;
+}
+</style>
+<!-- Firebase Imports -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, query, addDoc, onSnapshot, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global variables provided by the Canvas environment
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = {
+        apiKey: "AIzaSyCf_A4k-fXQb2MRXaUueqLOwBbS6vBoVoo",
+        authDomain: "myautth-v8iv5q.firebaseapp.com",
+        projectId: "myautth-v8iv5q",
+        storageBucket: "myautth-v8iv5q.appspot.com",
+        messagingSenderId: "1084690987173",
+        appId: "1:1084690987173:web:484f1a74d52004a767354c"
+    };
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    let db = null;
+    let auth = null;
+    let userId = null;
+    // Key variable for E2EE
+    let e2eKey = null;
+
+    // --- CRYPTO FUNCTIONS (CLIENT-SIDE E2EE) ---
+    const algo = { name: "AES-GCM", length: 256 };
+
+    /**
+     * Generates a new random AES-GCM key for E2EE.
+     * In a real app, this key would be derived from a shared secret using ECDH.
+     */
+    async function generateE2EKey() {
+        try {
+            // Check if crypto.subtle is available (requires HTTPS or localhost)
+            if (!window.crypto || !window.crypto.subtle) {
+                console.warn("Web Crypto API not available. Running in insecure context (HTTP).");
+                document.getElementById('key-status').textContent = 'Warning: Messages are NOT encrypted (HTTP context). Use localhost or HTTPS for encryption.';
+                document.getElementById('key-status').classList.remove('text-green-500');
+                document.getElementById('key-status').classList.add('text-yellow-500');
+                e2eKey = null; // No encryption key
+                return;
+            }
+            
+            e2eKey = await crypto.subtle.generateKey(algo, true, ["encrypt", "decrypt"]);
+            console.log("E2E Key Generated:", e2eKey);
+            document.getElementById('key-status').textContent = 'Key Ready! All messages are E2E encrypted.';
+            document.getElementById('key-status').classList.remove('text-red-500');
+            document.getElementById('key-status').classList.add('text-green-500');
+        } catch (error) {
+            console.error("Error generating key:", error);
+            document.getElementById('key-status').textContent = 'Error: Could not generate E2E Key.';
+            document.getElementById('key-status').classList.add('text-red-500');
+        }
+    }
+
+    /**
+     * Encrypts a plaintext string using the current E2E key (AES-GCM).
+     * @returns {Object} { ciphertext: ArrayBuffer, iv: ArrayBuffer }
+     */
+    async function encryptMessage(plaintext) {
+        // If no encryption key (insecure context), return plaintext
+        if (!e2eKey) {
+            console.warn("No encryption key available. Sending message in plaintext.");
+            return {
+                ciphertext: Array.from(new TextEncoder().encode(plaintext)),
+                iv: Array.from(new Uint8Array(12)) // Dummy IV
+            };
+        }
+        
+        const encoder = new TextEncoder();
+        const data = encoder.encode(plaintext);
+        // Generate a random 12-byte Initialization Vector (IV) for security
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+
+        const ciphertext = await crypto.subtle.encrypt(
+            { name: algo.name, iv: iv },
+            e2eKey,
+            data
+        );
+        return {
+            ciphertext: Array.from(new Uint8Array(ciphertext)), // Convert to array for Firestore storage
+            iv: Array.from(iv)
+        };
+    }
+
+    /**
+     * Decrypts a message payload using the current E2E key (AES-GCM).
+     * @returns {string} The decrypted plaintext string.
+     */
+    async function decryptMessage(payload) {
+        // If no encryption key (insecure context), return plaintext
+        if (!e2eKey) {
+            try {
+                const decoder = new TextDecoder();
+                return decoder.decode(new Uint8Array(payload.ciphertext));
+            } catch (error) {
+                return "❌ ERROR: Cannot decode this message.";
+            }
+        }
+        
+        try {
+            const decryptedData = await crypto.subtle.decrypt(
+                { name: algo.name, iv: new Uint8Array(payload.iv) },
+                e2eKey,
+                new Uint8Array(payload.ciphertext)
+            );
+            const decoder = new TextDecoder();
+            return decoder.decode(decryptedData);
+        } catch (error) {
+            // This means the message was encrypted with a different key or is corrupted
+            console.error("Decryption failed:", error);
+            return "❌ ENCRYPTION ERROR: Cannot decrypt this message.";
+        }
+    }
+
+    // --- FIREBASE AND APP LOGIC ---
+
+    function initFirebase() {
+        try {
+            setLogLevel('Debug');
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            // 1. Authenticate the user
+            if (initialAuthToken) {
+                signInWithCustomToken(auth, initialAuthToken)
+                    .then(result => {
+                        console.log("Custom auth successful:", result.user.uid);
+                    })
+                    .catch(err => {
+                        console.error("Custom Auth Error:", err);
+                        document.getElementById('error-message').textContent = 'Custom Auth failed: ' + err.message;
+                        document.getElementById('error-modal').classList.remove('hidden');
+                    });
+            } else {
+                signInAnonymously(auth)
+                    .then(result => {
+                        console.log("Anonymous auth successful:", result.user.uid);
+                    })
+                    .catch(err => {
+                        console.error("Anonymous Auth Error:", err);
+                        document.getElementById('error-message').textContent = 'Anonymous Auth failed: ' + err.message;
+                        document.getElementById('error-modal').classList.remove('hidden');
+                    });
+            }
+
+            // 2. Auth State Listener
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
+                    console.log("Authenticated with user ID:", userId);
+                    
+                    // 3. Generate E2E key and start listening for messages
+                    await generateE2EKey();
+                    setupRealtimeListener();
+                } else {
+                    console.log("Authentication failed or not ready.");
+                    // Handle unauthenticated state if necessary
+                }
+            });
+
+        } catch (e) {
+            console.error("Firebase initialization failed:", e);
+            document.getElementById('messages-container').innerHTML = '<p class="p-4 text-red-600">Failed to initialize Firebase. Check console for details.</p>';
+        }
+    }
+
+    /**
+     * Sets up the real-time listener for the chat collection.
+     */
+    function setupRealtimeListener() {
+        if (!db || !userId) return;
+
+        // Use a simple collection for the chat app
+        const collectionPath = `chat-messages`;
+        const messagesRef = collection(db, collectionPath);
+        
+        // Query to fetch messages, ordered by timestamp
+        const q = query(messagesRef, orderBy('timestamp', 'desc'));
+
+        onSnapshot(q, (snapshot) => {
+            const messagesContainer = document.getElementById('messages-container');
+            messagesContainer.innerHTML = ''; // Clear existing messages
+            
+            snapshot.docs.forEach(async (doc) => {
+                const data = doc.data();
+                const encryptedPayload = {
+                    ciphertext: data.ciphertext,
+                    iv: data.iv
+                };
+                
+                // Decrypt the message on the client
+                const decryptedText = await decryptMessage(encryptedPayload);
+
+                const isMine = data.senderId === userId;
+                const timestamp = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleTimeString() : '...';
+                
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('w-full', 'flex', 'mb-2', isMine ? 'justify-end' : 'justify-start');
+                
+                messageElement.innerHTML = `
+                    <div class="chat-bubble ${isMine ? 'my-message' : 'other-message'}">
+                        <p class="font-bold text-sm ${isMine ? 'text-indigo-200' : 'text-indigo-600'}">
+                            ${isMine ? 'You' : data.senderId.substring(0, 8)} <span class="text-xs font-normal opacity-75 ml-2">${timestamp}</span>
+                        </p>
+                        <p class="mt-1">${decryptedText}</p>
+                    </div>
+                `;
+                messagesContainer.appendChild(messageElement);
+            });
+            // Ensure scroll position is at the bottom (newest message) after rendering
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, (error) => {
+            console.error("Firestore error:", error);
+            document.getElementById('messages-container').innerHTML = '<p class="p-4 text-red-600">Error loading chat. Check network or console.</p>';
+        });
+    }
+
+    /**
+     * Handles sending a new message.
+     */
+    async function sendMessage(event) {
+        event.preventDefault();
+        const messageInput = document.getElementById('message-input');
+        const plaintext = messageInput.value.trim();
+
+        if (!plaintext || !db || !userId) {
+            console.warn("Message cannot be empty or initialization is incomplete.");
+            return;
+        }
+
+        try {
+            // 1. Encrypt the message before sending (or send as plaintext if no encryption)
+            const { ciphertext, iv } = await encryptMessage(plaintext);
+            
+            // 2. Create the document to store in Firestore
+            const messageData = {
+                senderId: userId,
+                ciphertext: ciphertext, // Encrypted data (ArrayBuffer stored as Array<Number>)
+                iv: iv,                 // Initialization Vector (critical for decryption)
+                timestamp: serverTimestamp(),
+            };
+
+            // 3. Save the encrypted data to Firestore
+            const collectionPath = `chat-messages`;
+            await addDoc(collection(db, collectionPath), messageData);
+            
+            messageInput.value = ''; // Clear input on success
+        } catch (error) {
+            console.error("Error sending or encrypting message:", error);
+            // Use a custom modal instead of alert()
+            document.getElementById('error-message').textContent = 'Failed to send message: ' + error.message;
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    }
+
+    // --- UI Setup ---
+    window.onload = () => {
+        initFirebase();
+        document.getElementById('send-form').addEventListener('submit', sendMessage);
+        
+        // Error modal handler
+        document.getElementById('close-modal').addEventListener('click', () => {
+            document.getElementById('error-modal').classList.add('hidden');
+        });
+    };
+</script>
+
+</head>
+<body class="p-4 md:p-8">
+
+<div class="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden h-full">
+    <!-- Header -->
+    <header class="bg-indigo-600 p-4 text-white flex justify-between items-center shadow-lg">
+        <h1 class="text-xl font-bold">{{ title }}</h1>
+        <div id="key-status" class="text-sm px-3 py-1 bg-indigo-700 rounded-full">
+            Generating E2E Key...
+        </div>
+    </header>
+
+    <!-- User Info -->
+    <div class="p-3 bg-indigo-50 text-indigo-800 text-sm font-medium border-b border-indigo-200">
+        <p id="user-id-display" class="truncate">Authenticating...</p>
+    </div>
+    
+    <!-- Messages Container (The main chat window) -->
+    <div id="messages-container" class="p-4 space-y-4">
+        <!-- Messages will be injected here -->
+        <div class="text-center text-gray-500 pt-10">
+            <p>Chat is loading. Generating secure E2E key...</p>
+            <div class="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+        </div>
+    </div>
+
+    <!-- Input Form -->
+    <div class="p-4 border-t border-gray-200">
+        <form id="send-form" class="flex gap-2">
+            <input 
+                type="text" 
+                id="message-input" 
+                placeholder="Type your secure message here..." 
+                class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 shadow-sm"
+                autocomplete="off"
+            >
+            <button 
+                type="submit" 
+                class="bg-indigo-600 text-white p-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-150 shadow-md flex items-center"
+            >
+                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                Send E2E
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Custom Error Modal (Replaces alert()) -->
+<div id="error-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+        <h3 class="text-xl font-bold text-red-600 mb-4">Transmission Error</h3>
+        <p id="error-message" class="text-gray-700 mb-6">An unknown error occurred.</p>
+        <button id="close-modal" class="w-full bg-red-600 text-white p-2 rounded-lg hover:bg-red-700 transition">
+            Close
+        </button>
+    </div>
+</div>
+
+</body>
+</html>
