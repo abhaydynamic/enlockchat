@@ -52,13 +52,7 @@ def offline():
 # --- Running the App ---
 if __name__ == '__main__':
     # Run the app. debug=True enables hot reloading for development.
-    print(f"Starting Flask application '{APP_TITLE}'...")
-    print("🚀 Enlock Chat - Secure Messaging App")
-    print("📱 PWA Features: ✓ Offline Support ✓ Install Prompt ✓ Push Notifications")
-    print("🔒 Security: ✓ End-to-End Encryption ✓ Firebase Auth ✓ Secure Storage")
-    print("")
-    print("🌐 Open your browser to http://127.0.0.1:5000/")
-    print("📱 For mobile testing: http://[your-ip]:5000/")
-    print("")
+   
     # The host='0.0.0.0' makes it accessible externally, good for environments like this.
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run()
+
