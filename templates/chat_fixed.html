@@ -3345,12 +3345,118 @@
                     document.getElementById('encryption-status').parentElement.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
                     return;
                 }
+
+                // Check if key already exists in IndexedDB
+                const existingKey = await loadKeyFromStorage();
+                if (existingKey) {
+                    e2eKey = existingKey;
+                    console.log("Loaded existing encryption key from storage");
+                    document.getElementById('encryption-status').textContent = 'End-to-End Encrypted';
+                    return;
+                }
                 
+                // Generate new key
                 e2eKey = await crypto.subtle.generateKey(algo, true, ["encrypt", "decrypt"]);
+                
+                // Save key to IndexedDB for persistence
+                await saveKeyToStorage(e2eKey);
+                
+                console.log("Generated new encryption key and saved to storage");
                 document.getElementById('encryption-status').textContent = 'End-to-End Encrypted';
+                
             } catch (error) {
-                console.error("Error generating key:", error);
+                console.error("Error generating/loading key:", error);
                 document.getElementById('encryption-status').textContent = 'Encryption Error';
+                
+                // Try to continue without encryption
+                e2eKey = null;
+                showError("Encryption setup failed. Messages will be sent unencrypted. Please refresh the page.");
+            }
+        }
+
+        // IndexedDB key storage functions
+        async function saveKeyToStorage(key) {
+            try {
+                const exported = await crypto.subtle.exportKey("raw", key);
+                const keyData = Array.from(new Uint8Array(exported));
+                
+                // Save to localStorage as fallback (less secure but more compatible)
+                localStorage.setItem('enlockChatKey', JSON.stringify(keyData));
+                
+                console.log("Encryption key saved to storage");
+            } catch (error) {
+                console.error("Failed to save key to storage:", error);
+            }
+        }
+
+        async function loadKeyFromStorage() {
+            try {
+                const keyDataStr = localStorage.getItem('enlockChatKey');
+                if (!keyDataStr) return null;
+                
+                const keyData = JSON.parse(keyDataStr);
+                const keyBuffer = new Uint8Array(keyData).buffer;
+                
+                const importedKey = await crypto.subtle.importKey(
+                    "raw",
+                    keyBuffer,
+                    algo,
+                    true,
+                    ["encrypt", "decrypt"]
+                );
+                
+                return importedKey;
+            } catch (error) {
+                console.error("Failed to load key from storage:", error);
+                // Clear corrupted key data
+                localStorage.removeItem('enlockChatKey');
+                return null;
+            }
+        }
+
+        // Safe decryption wrapper with fallback handling
+        async function safeDecryptMessage(messageData) {
+            try {
+                // Handle different message formats
+                if (messageData.text && !messageData.ciphertext) {
+                    // Already plaintext
+                    return messageData.text;
+                }
+                
+                if (messageData.ciphertext && messageData.iv) {
+                    // Encrypted message
+                    return await decryptMessage({
+                        ciphertext: messageData.ciphertext,
+                        iv: messageData.iv
+                    });
+                }
+                
+                // Try to extract text content
+                if (messageData.text) {
+                    return messageData.text;
+                }
+                
+                return "❌ Unable to read message";
+                
+            } catch (error) {
+                console.error("Safe decryption failed:", error);
+                
+                // Try to recover from the error
+                if (messageData.text) {
+                    return messageData.text;
+                }
+                
+                return "❌ Message corrupted or incompatible";
+            }
+        }
+
+        async function clearStoredKey() {
+            try {
+                localStorage.removeItem('enlockChatKey');
+                e2eKey = null;
+                console.log("Cleared stored encryption key");
+            } catch (error) {
+                console.error("Failed to clear stored key:", error);
             }
         }
 
@@ -3379,26 +3485,93 @@
         }
 
         async function decryptMessage(payload) {
+            // Validate payload structure
+            if (!payload) {
+                console.error("Decryption failed: No payload provided");
+                return "❌ Invalid message format";
+            }
+
+            // Check if payload has required properties
+            if (!payload.ciphertext || !payload.iv) {
+                console.error("Decryption failed: Missing ciphertext or IV");
+                // Try to return as plaintext if it's unencrypted
+                if (typeof payload === 'string') {
+                    return payload;
+                } else if (payload.text) {
+                    return payload.text;
+                }
+                return "❌ Invalid message format";
+            }
+
+            // If no encryption key, try to handle as unencrypted message
             if (!e2eKey) {
+                console.warn("No encryption key available, attempting to decode as unencrypted");
                 try {
+                    // Check if it's already a string
+                    if (typeof payload.ciphertext === 'string') {
+                        return payload.ciphertext;
+                    }
+                    
+                    // Try to decode as Uint8Array
                     const decoder = new TextDecoder();
                     return decoder.decode(new Uint8Array(payload.ciphertext));
                 } catch (error) {
-                    return "❌ Cannot decode message";
+                    console.error("Failed to decode unencrypted message:", error);
+                    return "❌ Cannot decode message - no encryption key";
                 }
             }
             
             try {
+                // Validate IV and ciphertext arrays
+                if (!Array.isArray(payload.iv) || !Array.isArray(payload.ciphertext)) {
+                    throw new Error("Invalid payload format: IV and ciphertext must be arrays");
+                }
+
+                // Validate IV length (should be 12 bytes for AES-GCM)
+                if (payload.iv.length !== 12) {
+                    throw new Error(`Invalid IV length: expected 12, got ${payload.iv.length}`);
+                }
+
+                // Convert arrays to Uint8Array
+                const iv = new Uint8Array(payload.iv);
+                const ciphertext = new Uint8Array(payload.ciphertext);
+
+                // Attempt decryption
                 const decryptedData = await crypto.subtle.decrypt(
-                    { name: algo.name, iv: new Uint8Array(payload.iv) },
+                    { name: algo.name, iv: iv },
                     e2eKey,
-                    new Uint8Array(payload.ciphertext)
+                    ciphertext
                 );
+                
                 const decoder = new TextDecoder();
-                return decoder.decode(decryptedData);
+                const decryptedText = decoder.decode(decryptedData);
+                
+                // Validate decrypted text
+                if (!decryptedText || decryptedText.length === 0) {
+                    throw new Error("Decrypted message is empty");
+                }
+                
+                return decryptedText;
+                
             } catch (error) {
                 console.error("Decryption failed:", error);
-                return "❌ Decryption failed";
+                console.error("Payload details:", {
+                    hasKey: !!e2eKey,
+                    ivLength: payload.iv?.length,
+                    ciphertextLength: payload.ciphertext?.length,
+                    payloadType: typeof payload
+                });
+
+                // Specific error messages based on error type
+                if (error.name === 'InvalidAccessError') {
+                    return "❌ Invalid encryption key";
+                } else if (error.name === 'OperationError') {
+                    return "❌ Corrupted message data";
+                } else if (error.message.includes('Invalid IV length')) {
+                    return "❌ Invalid message format";
+                } else {
+                    return "❌ Decryption failed - message may be corrupted";
+                }
             }
         }
 
@@ -6777,6 +6950,37 @@
             console.log('Enlock Chat app was installed.');
             showSuccess('Enlock Chat installed successfully!');
         });
+        // Debug and troubleshooting functions
+        window.debugEnlockChat = {
+            clearEncryptionKey: async () => {
+                await clearStoredKey();
+                await generateE2EKey();
+                showSuccess("Encryption key reset. Refresh the page to apply changes.");
+            },
+            
+            checkEncryptionStatus: () => {
+                console.log("Encryption Status:", {
+                    hasKey: !!e2eKey,
+                    cryptoAvailable: !!(window.crypto && window.crypto.subtle),
+                    keyInStorage: !!localStorage.getItem('enlockChatKey'),
+                    algorithm: algo
+                });
+            },
+            
+            testDecryption: async (messageData) => {
+                try {
+                    const result = await safeDecryptMessage(messageData);
+                    console.log("Test decryption result:", result);
+                    return result;
+                } catch (error) {
+                    console.error("Test decryption failed:", error);
+                    return error.message;
+                }
+            }
+        };
+
+        // Make safe decryption available globally
+        window.safeDecryptMessage = safeDecryptMessage;
     </script>
 </body>
 </html>
