@@ -3414,6 +3414,39 @@
             }
         }
 
+        // Safe decryption wrapper with error handling
+        async function safeDecryptMessage(messageData) {
+            try {
+                // If it's already a string, return it
+                if (typeof messageData === 'string') {
+                    return messageData;
+                }
+                
+                // If it has plaintext, return it
+                if (messageData && messageData.text && !messageData.ciphertext) {
+                    return messageData.text;
+                }
+                
+                // If no ciphertext, return fallback
+                if (!messageData || !messageData.ciphertext) {
+                    return "Message";
+                }
+                
+                // Try to decrypt
+                const decrypted = await decryptMessage(messageData);
+                
+                // Check if decryption failed (error messages start with ❌)
+                if (decrypted && decrypted.includes('❌')) {
+                    return "Encrypted message";
+                }
+                
+                return decrypted;
+            } catch (error) {
+                console.error('Safe decrypt failed:', error);
+                return "Encrypted message";
+            }
+        }
+
         // Completely robust decryption with multiple fallback strategies
         async function bulletproofDecryptMessage(messageData) {
             // Strategy 1: Check if it's already plaintext
@@ -4897,7 +4930,7 @@
             } else if (currentChatUser) {
                 authorName = currentChatUser.displayName || currentChatUser.username || 'Unknown User';
             }
-window.safeDecryptMessage = safeDecryptMessage;
+
             // Get content based on message type
             if (messageData.text || messageData.ciphertext) {
                 if (messageData.ciphertext) {
