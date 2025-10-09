@@ -4886,10 +4886,7 @@
             if (messageData.text || messageData.ciphertext) {
                 if (messageData.ciphertext) {
                     try {
-                        const decrypted = await decryptMessage({
-                            ciphertext: messageData.ciphertext,
-                            iv: messageData.iv
-                        });
+                        const decrypted = await safeDecryptMessage(messageData);
                         replyContent = decrypted;
                     } catch (error) {
                         replyContent = 'Encrypted message';
@@ -5016,10 +5013,7 @@
                         searchableText = messageData.text;
                     } else if (messageData.ciphertext) {
                         try {
-                            const decrypted = await decryptMessage({
-                                ciphertext: messageData.ciphertext,
-                                iv: messageData.iv
-                            });
+                            const decrypted = await safeDecryptMessage(messageData);
                             searchableText = decrypted;
                         } catch (error) {
                             continue; // Skip if can't decrypt
@@ -5228,10 +5222,7 @@
                     content = message.text;
                 } else if (message.ciphertext) {
                     try {
-                        content = await decryptMessage({
-                            ciphertext: message.ciphertext,
-                            iv: message.iv
-                        });
+                        content = await safeDecryptMessage(message);
                     } catch (error) {
                         content = 'Encrypted message';
                     }
@@ -5833,16 +5824,14 @@
                         const otherUser = otherUserDoc.data();
                         
                         let lastMessagePreview = 'No messages yet';
-                        if (chat.lastMessage && chat.lastMessage.ciphertext) {
+                        if (chat.lastMessage) {
                             try {
-                                lastMessagePreview = await decryptMessage({
-                                    ciphertext: chat.lastMessage.ciphertext,
-                                    iv: chat.lastMessage.iv
-                                });
+                                lastMessagePreview = await safeDecryptMessage(chat.lastMessage);
                                 if (lastMessagePreview.length > 40) {
                                     lastMessagePreview = lastMessagePreview.substring(0, 40) + '...';
                                 }
                             } catch (error) {
+                                console.error('Error decrypting chat preview:', error);
                                 lastMessagePreview = 'Message unavailable';
                             }
                         }
@@ -6125,10 +6114,7 @@
                         }
                     } else {
                         // Handle text messages
-                        const decryptedText = await decryptMessage({
-                            ciphertext: messageData.ciphertext,
-                            iv: messageData.iv
-                        });
+                        const decryptedText = await safeDecryptMessage(messageData);
                         
                         const textWithLinks = makeLinksClickable(decryptedText);
                         
@@ -6157,10 +6143,7 @@
                     
                     // Process link previews for text messages
                     if (!isDeleted && messageData.ciphertext) {
-                        const decryptedText = await decryptMessage({
-                            ciphertext: messageData.ciphertext,
-                            iv: messageData.iv
-                        });
+                        const decryptedText = await safeDecryptMessage(messageData);
                         processMessageLinks(messageWrapper, decryptedText);
                     } else if (messageData.text && !isDeleted) {
                         processMessageLinks(messageWrapper, messageData.text);
@@ -6272,10 +6255,7 @@
                     if (currentReplyingTo.text || currentReplyingTo.ciphertext) {
                         if (currentReplyingTo.ciphertext) {
                             try {
-                                const decrypted = await decryptMessage({
-                                    ciphertext: currentReplyingTo.ciphertext,
-                                    iv: currentReplyingTo.iv
-                                });
+                                const decrypted = await safeDecryptMessage(currentReplyingTo);
                                 messageData.replyTo.content = decrypted;
                                 messageData.replyTo.type = 'text';
                             } catch (error) {
@@ -6950,6 +6930,18 @@
             console.log('Enlock Chat app was installed.');
             showSuccess('Enlock Chat installed successfully!');
         });
+        // Global error handler for unhandled promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+            if (event.reason && event.reason.toString().includes('DOMException')) {
+                console.error('Unhandled decryption error:', event.reason);
+                // Prevent the error from showing in console
+                event.preventDefault();
+                
+                // Show user-friendly message
+                showError('A message could not be decrypted. This may be due to encryption key issues. Try refreshing the page.');
+            }
+        });
+
         // Debug and troubleshooting functions
         window.debugEnlockChat = {
             clearEncryptionKey: async () => {
