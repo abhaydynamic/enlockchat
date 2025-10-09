@@ -3701,7 +3701,7 @@
         // Make utility functions globally accessible for message rendering
         window.getFileIcon = getFileIcon;
         window.formatFileSize = formatFileSize;
-        window.formatVoiceDuration = formatVoiceDuration;
+        
         
         // Make blocking functions globally accessible
         window.closeBlockDialog = closeBlockDialog;
@@ -5708,14 +5708,7 @@
                                         <i class="fas fa-microphone text-sm opacity-70"></i>
                                         <span class="text-sm font-medium">Voice Message</span>
                                     </div>
-                                    <audio controls class="w-full">
-                                        <source src="${voiceData.url}" type="audio/webm">
-                                        <source src="${voiceData.url}" type="audio/ogg">
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                    <div class="voice-duration text-right">
-                                        ${formatVoiceDuration(voiceData.duration)}
-                                    </div>
+                                    
                                 </div>
                             </div>
                         `;
@@ -6552,4 +6545,5 @@
     </script>
 </body>
 </html>
+
 
