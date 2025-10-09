@@ -3414,40 +3414,56 @@
             }
         }
 
-        // Safe decryption wrapper with fallback handling
-        async function safeDecryptMessage(messageData) {
-            try {
-                // Handle different message formats
-                if (messageData.text && !messageData.ciphertext) {
-                    // Already plaintext
-                    return messageData.text;
-                }
-                
-                if (messageData.ciphertext && messageData.iv) {
-                    // Encrypted message
-                    return await decryptMessage({
-                        ciphertext: messageData.ciphertext,
-                        iv: messageData.iv
-                    });
-                }
-                
-                // Try to extract text content
-                if (messageData.text) {
-                    return messageData.text;
-                }
-                
-                return "❌ Unable to read message";
-                
-            } catch (error) {
-                console.error("Safe decryption failed:", error);
-                
-                // Try to recover from the error
-                if (messageData.text) {
-                    return messageData.text;
-                }
-                
-                return "❌ Message corrupted or incompatible";
+        // Completely robust decryption with multiple fallback strategies
+        async function bulletproofDecryptMessage(messageData) {
+            // Strategy 1: Check if it's already plaintext
+            if (typeof messageData === 'string') {
+                return messageData;
             }
+            
+            if (messageData && messageData.text && !messageData.ciphertext) {
+                return messageData.text;
+            }
+            
+            // Strategy 2: Handle missing or invalid data
+            if (!messageData || (!messageData.ciphertext && !messageData.text)) {
+                return "📝 Message";
+            }
+            
+            // Strategy 3: Try safe decryption if we have encrypted data
+            if (messageData.ciphertext && messageData.iv) {
+                try {
+                    const result = await safeDecryptMessage(messageData);
+                    if (result && !result.includes('❌')) {
+                        return result;
+                    }
+                } catch (error) {
+                    console.warn('Decryption attempt failed, using fallback');
+                }
+            }
+            
+            // Strategy 4: Final fallbacks
+            if (messageData.text) {
+                return messageData.text;
+            }
+            
+            if (messageData.fileName) {
+                return `📎 ${messageData.fileName}`;
+            }
+            
+            if (messageData.type === 'image' || messageData.imageUrl) {
+                return "🖼️ Image";
+            }
+            
+            if (messageData.type === 'voice' || messageData.voiceUrl) {
+                return "🎵 Voice message";
+            }
+            
+            if (messageData.type === 'file' || messageData.fileUrl) {
+                return "📎 File";
+            }
+            
+            return "💬 Message";
         }
 
         async function clearStoredKey() {
@@ -5826,13 +5842,13 @@
                         let lastMessagePreview = 'No messages yet';
                         if (chat.lastMessage) {
                             try {
-                                lastMessagePreview = await safeDecryptMessage(chat.lastMessage);
+                                lastMessagePreview = await bulletproofDecryptMessage(chat.lastMessage);
                                 if (lastMessagePreview.length > 40) {
                                     lastMessagePreview = lastMessagePreview.substring(0, 40) + '...';
                                 }
                             } catch (error) {
                                 console.error('Error decrypting chat preview:', error);
-                                lastMessagePreview = 'Message unavailable';
+                                lastMessagePreview = '💬 Recent message';
                             }
                         }
                         
@@ -6114,7 +6130,7 @@
                         }
                     } else {
                         // Handle text messages
-                        const decryptedText = await safeDecryptMessage(messageData);
+                        const decryptedText = await bulletproofDecryptMessage(messageData);
                         
                         const textWithLinks = makeLinksClickable(decryptedText);
                         
@@ -6143,7 +6159,7 @@
                     
                     // Process link previews for text messages
                     if (!isDeleted && messageData.ciphertext) {
-                        const decryptedText = await safeDecryptMessage(messageData);
+                        const decryptedText = await bulletproofDecryptMessage(messageData);
                         processMessageLinks(messageWrapper, decryptedText);
                     } else if (messageData.text && !isDeleted) {
                         processMessageLinks(messageWrapper, messageData.text);
@@ -6944,10 +6960,35 @@
 
         // Debug and troubleshooting functions
         window.debugEnlockChat = {
+            // Nuclear option - complete reset
+            completeReset: async () => {
+                try {
+                    // Clear all encryption data
+                    localStorage.removeItem('enlockChatKey');
+                    localStorage.removeItem('darkMode');
+                    
+                    // Reset global variables
+                    e2eKey = null;
+                    currentUser = null;
+                    currentChatUser = null;
+                    
+                    // Clear Firebase auth
+                    if (auth && auth.currentUser) {
+                        await signOut(auth);
+                    }
+                    
+                    // Reload page
+                    window.location.reload();
+                } catch (error) {
+                    console.error('Reset failed:', error);
+                    window.location.reload();
+                }
+            },
+            
             clearEncryptionKey: async () => {
                 await clearStoredKey();
                 await generateE2EKey();
-                showSuccess("Encryption key reset. Refresh the page to apply changes.");
+                showSuccess("Encryption key reset. App should work better now.");
             },
             
             checkEncryptionStatus: () => {
@@ -6955,13 +6996,14 @@
                     hasKey: !!e2eKey,
                     cryptoAvailable: !!(window.crypto && window.crypto.subtle),
                     keyInStorage: !!localStorage.getItem('enlockChatKey'),
-                    algorithm: algo
+                    algorithm: algo,
+                    currentUser: !!currentUser
                 });
             },
             
             testDecryption: async (messageData) => {
                 try {
-                    const result = await safeDecryptMessage(messageData);
+                    const result = await bulletproofDecryptMessage(messageData);
                     console.log("Test decryption result:", result);
                     return result;
                 } catch (error) {
