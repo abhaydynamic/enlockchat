@@ -3335,6 +3335,7 @@
 
         // Encryption functions
         const algo = { name: "AES-GCM", length: 256 };
+        let chatKeys = new Map(); // Store keys per chat
 
         async function generateE2EKey() {
             try {
@@ -3346,71 +3347,79 @@
                     return;
                 }
 
-                // Check if key already exists in IndexedDB
-                const existingKey = await loadKeyFromStorage();
-                if (existingKey) {
-                    e2eKey = existingKey;
-                    console.log("Loaded existing encryption key from storage");
-                    document.getElementById('encryption-status').textContent = 'End-to-End Encrypted';
-                    return;
-                }
-                
-                // Generate new key
-                e2eKey = await crypto.subtle.generateKey(algo, true, ["encrypt", "decrypt"]);
-                
-                // Save key to IndexedDB for persistence
-                await saveKeyToStorage(e2eKey);
-                
-                console.log("Generated new encryption key and saved to storage");
+                console.log("Encryption system initialized (using per-chat shared keys)");
                 document.getElementById('encryption-status').textContent = 'End-to-End Encrypted';
                 
             } catch (error) {
-                console.error("Error generating/loading key:", error);
+                console.error("Error initializing encryption:", error);
                 document.getElementById('encryption-status').textContent = 'Encryption Error';
-                
-                // Try to continue without encryption
-                e2eKey = null;
-                showError("Encryption setup failed. Messages will be sent unencrypted. Please refresh the page.");
+                showError("Encryption setup failed. Please refresh the page.");
             }
         }
 
-        // IndexedDB key storage functions
-        async function saveKeyToStorage(key) {
+        // Get or create shared encryption key for a specific chat
+        async function getSharedKeyForChat(chatId) {
             try {
-                const exported = await crypto.subtle.exportKey("raw", key);
+                // Check if we already have the key in memory
+                if (chatKeys.has(chatId)) {
+                    return chatKeys.get(chatId);
+                }
+
+                // Try to load from Firebase
+                const chatRef = doc(db, 'chats', chatId);
+                const chatDoc = await getDoc(chatRef);
+                
+                if (chatDoc.exists() && chatDoc.data().encryptionKey) {
+                    // Key exists in Firebase, import it
+                    const keyData = chatDoc.data().encryptionKey;
+                    const keyBuffer = new Uint8Array(keyData).buffer;
+                    const importedKey = await crypto.subtle.importKey(
+                        "raw",
+                        keyBuffer,
+                        algo,
+                        true,
+                        ["encrypt", "decrypt"]
+                    );
+                    chatKeys.set(chatId, importedKey);
+                    console.log(`Loaded shared encryption key for chat ${chatId}`);
+                    return importedKey;
+                }
+
+                // No key exists, generate new one and save to Firebase
+                const newKey = await crypto.subtle.generateKey(algo, true, ["encrypt", "decrypt"]);
+                const exported = await crypto.subtle.exportKey("raw", newKey);
                 const keyData = Array.from(new Uint8Array(exported));
-                
-                // Save to localStorage as fallback (less secure but more compatible)
-                localStorage.setItem('enlockChatKey', JSON.stringify(keyData));
-                
-                console.log("Encryption key saved to storage");
+
+                // Save to Firebase so both users can access it
+                await setDoc(chatRef, {
+                    encryptionKey: keyData,
+                    createdAt: serverTimestamp()
+                }, { merge: true });
+
+                chatKeys.set(chatId, newKey);
+                console.log(`Generated and saved new shared encryption key for chat ${chatId}`);
+                return newKey;
+
             } catch (error) {
-                console.error("Failed to save key to storage:", error);
+                console.error("Error getting shared key:", error);
+                // Return null to allow unencrypted fallback
+                return null;
             }
         }
 
-        async function loadKeyFromStorage() {
-            try {
-                const keyDataStr = localStorage.getItem('enlockChatKey');
-                if (!keyDataStr) return null;
-                
-                const keyData = JSON.parse(keyDataStr);
-                const keyBuffer = new Uint8Array(keyData).buffer;
-                
-                const importedKey = await crypto.subtle.importKey(
-                    "raw",
-                    keyBuffer,
-                    algo,
-                    true,
-                    ["encrypt", "decrypt"]
-                );
-                
-                return importedKey;
-            } catch (error) {
-                console.error("Failed to load key from storage:", error);
-                // Clear corrupted key data
-                localStorage.removeItem('enlockChatKey');
-                return null;
+        // Load the correct key when switching chats
+        async function loadKeyForCurrentChat() {
+            const chatId = getCurrentChatId();
+            if (!chatId) {
+                e2eKey = null;
+                return;
+            }
+
+            e2eKey = await getSharedKeyForChat(chatId);
+            if (e2eKey) {
+                console.log(`Active encryption key set for chat ${chatId}`);
+            } else {
+                console.warn(`No encryption key available for chat ${chatId}`);
             }
         }
 
@@ -3435,15 +3444,15 @@
                 // Try to decrypt
                 const decrypted = await decryptMessage(messageData);
                 
-                // Check if decryption failed (error messages start with ❌)
-                if (decrypted && decrypted.includes('❌')) {
-                    return "Encrypted message";
+                // Check if decryption failed (error messages start with ❌ or 🔒)
+                if (decrypted && (decrypted.includes('❌') || decrypted.includes('🔒'))) {
+                    return "🔒 Encrypted message";
                 }
                 
                 return decrypted;
             } catch (error) {
                 console.error('Safe decrypt failed:', error);
-                return "Encrypted message";
+                return "🔒 Encrypted message";
             }
         }
 
@@ -3467,8 +3476,13 @@
             if (messageData.ciphertext && messageData.iv) {
                 try {
                     const result = await safeDecryptMessage(messageData);
-                    if (result && !result.includes('❌')) {
+                    // Accept result unless it contains error indicators
+                    if (result && !result.includes('❌') && !result.includes('🔒')) {
                         return result;
+                    }
+                    // If decryption failed due to key mismatch, show appropriate message
+                    if (result && result.includes('🔒')) {
+                        return "🔒 Encrypted message";
                     }
                 } catch (error) {
                     console.warn('Decryption attempt failed, using fallback');
@@ -3499,15 +3513,78 @@
             return "💬 Message";
         }
 
+        // Clear all cached keys
         async function clearStoredKey() {
             try {
-                localStorage.removeItem('enlockChatKey');
+                chatKeys.clear();
                 e2eKey = null;
-                console.log("Cleared stored encryption key");
+                console.log("Cleared all cached encryption keys");
             } catch (error) {
-                console.error("Failed to clear stored key:", error);
+                console.error("Failed to clear cached keys:", error);
             }
         }
+
+        // Helper function to reset encryption key for current chat
+        async function resetEncryptionKey() {
+            try {
+                const chatId = getCurrentChatId();
+                if (!chatId) {
+                    showError("No active chat selected");
+                    return false;
+                }
+
+                console.log(`Resetting encryption key for chat ${chatId}...`);
+                
+                // Remove from cache
+                chatKeys.delete(chatId);
+                
+                // Generate new key and save to Firebase
+                const newKey = await crypto.subtle.generateKey(algo, true, ["encrypt", "decrypt"]);
+                const exported = await crypto.subtle.exportKey("raw", newKey);
+                const keyData = Array.from(new Uint8Array(exported));
+
+                const chatRef = doc(db, 'chats', chatId);
+                await setDoc(chatRef, {
+                    encryptionKey: keyData,
+                    keyResetAt: serverTimestamp()
+                }, { merge: true });
+
+                chatKeys.set(chatId, newKey);
+                e2eKey = newKey;
+
+                showSuccess("Encryption key reset successfully. Both users will use the new key.");
+                console.log("Encryption key has been reset. Messages encrypted with old key may not be readable.");
+                return true;
+            } catch (error) {
+                console.error("Failed to reset encryption key:", error);
+                showError("Failed to reset encryption key. Please try again.");
+                return false;
+            }
+        }
+
+        // Helper function to check encryption status
+        function checkEncryptionStatus() {
+            const chatId = getCurrentChatId();
+            console.log("=== Encryption Status ===");
+            console.log("Current Chat ID:", chatId || "No active chat");
+            console.log("Active Key Loaded:", !!e2eKey);
+            console.log("Cached Keys Count:", chatKeys.size);
+            if (chatId) {
+                console.log(`Key for current chat (${chatId}):`, chatKeys.has(chatId) ? "✅ Cached" : "❌ Not cached");
+            }
+            console.log("========================");
+            
+            if (!e2eKey && chatId) {
+                console.warn("⚠️ No encryption key loaded for active chat!");
+                console.log("Try running: await loadKeyForCurrentChat()");
+            }
+        }
+
+        // Make functions available globally for debugging
+        window.resetEncryptionKey = resetEncryptionKey;
+        window.clearStoredKey = clearStoredKey;
+        window.loadKeyForCurrentChat = loadKeyForCurrentChat;
+        window.checkEncryptionStatus = checkEncryptionStatus;
 
         async function encryptMessage(plaintext) {
             if (!e2eKey) {
@@ -3554,7 +3631,8 @@
 
             // If no encryption key, try to handle as unencrypted message
             if (!e2eKey) {
-                console.warn("No encryption key available, attempting to decode as unencrypted");
+                console.warn("No encryption key available for current chat. Try loading the chat again.");
+                console.warn("You can also try: await loadKeyForCurrentChat()");
                 try {
                     // Check if it's already a string
                     if (typeof payload.ciphertext === 'string') {
@@ -3608,18 +3686,24 @@
                     hasKey: !!e2eKey,
                     ivLength: payload.iv?.length,
                     ciphertextLength: payload.ciphertext?.length,
-                    payloadType: typeof payload
+                    payloadType: typeof payload,
+                    errorName: error.name,
+                    errorMessage: error.message
                 });
 
                 // Specific error messages based on error type
                 if (error.name === 'InvalidAccessError') {
-                    return "❌ Invalid encryption key";
-                } else if (error.name === 'OperationError') {
-                    return "❌ Corrupted message data";
+                    console.warn("Invalid encryption key - key mismatch detected");
+                    return "🔒 Message encrypted with different key";
+                } else if (error.name === 'OperationError' || error.message.includes('operation failed')) {
+                    // This typically means key mismatch - the message was encrypted with a different key
+                    console.warn("Key mismatch - message encrypted with different encryption key");
+                    return "🔒 Message encrypted with different key";
                 } else if (error.message.includes('Invalid IV length')) {
                     return "❌ Invalid message format";
                 } else {
-                    return "❌ Decryption failed - message may be corrupted";
+                    console.warn("Decryption failed with unknown error:", error.name);
+                    return "🔒 Unable to decrypt message";
                 }
             }
         }
@@ -4318,6 +4402,11 @@
             
             try {
                 showLoading('Sending voice message...');
+                
+                // Ensure encryption key is loaded
+                if (!e2eKey) {
+                    await loadKeyForCurrentChat();
+                }
                 
                 // Create a unique filename for the voice message
                 const timestamp = Date.now();
@@ -5996,7 +6085,7 @@
             listenToTypingStatus(chatId);
         }
 
-        function loadMessages(otherUserId) {
+        async function loadMessages(otherUserId) {
             if (messageListeners.has(otherUserId)) {
                 messageListeners.get(otherUserId)();
                 messageListeners.delete(otherUserId);
@@ -6013,6 +6102,9 @@
             }
             
             const chatId = generateChatId(currentUser.uid, otherUserId);
+            
+            // Load encryption key for this chat
+            await loadKeyForCurrentChat();
             const messagesRef = collection(db, 'chats', chatId, 'messages');
             const reactionsRef = collection(db, 'chats', chatId, 'reactions');
             const q = query(messagesRef, orderBy('timestamp', 'desc'), limit(50));
@@ -6279,6 +6371,11 @@
             
             try {
                 const chatId = generateChatId(currentUser.uid, currentChatUser.uid);
+                
+                // Ensure encryption key is loaded for this chat
+                if (!e2eKey) {
+                    await loadKeyForCurrentChat();
+                }
                 
                 // Hide typing status when sending message
                 hideTypingStatus(chatId);
