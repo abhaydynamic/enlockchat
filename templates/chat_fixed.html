@@ -117,23 +117,31 @@
         .message-bubble {
             max-width: 75%;
             word-wrap: break-word;
+            padding: 12px 16px;
+            border-radius: 18px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            position: relative;
+            display: inline-block;
         }
         
         .message-bubble p {
             white-space: pre-wrap;
             word-wrap: break-word;
             margin: 0;
+            line-height: 1.5;
         }
         
         .my-message {
-            background: var(--gradient-primary);
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
             color: white;
+            border-bottom-right-radius: 6px;
         }
         
         .other-message {
-            background: var(--chat-other-bg);
-            color: var(--chat-other-text);
-            border: 1px solid var(--border-color);
+            background: #f1f3f4;
+            color: #202124;
+            border: 1px solid #e8eaed;
+            border-bottom-left-radius: 6px;
         }
         
         /* Link Preview Styles */
@@ -544,10 +552,33 @@
         .message-container {
             position: relative;
             margin-bottom: 12px;
+            display: flex;
+            clear: both;
+            animation: messageSlideIn 0.2s ease-out;
+        }
+        
+        .my-message-container {
+            justify-content: flex-end;
+        }
+        
+        .other-message-container {
+            justify-content: flex-start;
+        }
+        
+        @keyframes messageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .message-actions {
             position: absolute;
+            top: 50%;
             transform: translateY(-50%);
             opacity: 0;
             transition: opacity 0.2s ease;
@@ -628,7 +659,8 @@
             display: flex;
             flex-wrap: wrap;
             gap: 4px;
-            margin-top: 6px;
+            margin-top: 8px;
+            margin-left: 2px;
             max-width: 300px;
         }
         
@@ -636,7 +668,7 @@
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            padding: 2px 8px;
+            padding: 3px 8px;
             display: flex;
             align-items: center;
             gap: 4px;
@@ -694,11 +726,16 @@
             background: var(--accent-bg);
         }
         
+        .message-content {
+            margin-bottom: 4px;
+        }
+        
         .media-message {
             max-width: 300px;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin: 4px 0;
         }
         
         .media-message img {
@@ -707,6 +744,12 @@
             display: block;
             max-height: 400px;
             object-fit: cover;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .media-message img:hover {
+            transform: scale(1.02);
         }
         
         .media-message video {
@@ -861,14 +904,22 @@
         }
         
         .deleted-message {
-            opacity: 0.6;
+            opacity: 0.65;
             font-style: italic;
-            background: var(--bg-tertiary) !important;
-            color: var(--text-muted) !important;
+            background: #f3f4f6 !important;
+            color: #9ca3af !important;
+            border: 1px dashed #d1d5db !important;
         }
         
         .deleted-message.my-message {
-            background: #ddd6fe !important;
+            background: #e0e7ff !important;
+            color: #818cf8 !important;
+        }
+        
+        .deleted-message-content {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
         }
         
         /* Mobile Responsive Styles */
@@ -973,34 +1024,35 @@
             
             /* Mobile message improvements */
             .message-container {
-                margin-bottom: 8px;
+                margin-bottom: 12px;
                 max-width: 100%;
+                padding: 0 8px;
             }
             
             .message-bubble {
                 max-width: 85%;
-                min-width:max-content;
-                font-size: 16px;
-                padding: 12px 16px;
-                line-height: 1.4;
+                min-width: max-content;
+                font-size: 15px;
+                padding: 10px 14px;
+                line-height: 1.5;
                 word-wrap: break-word;
-                border-radius: 18px;
+                border-radius: 16px;
                 position: relative;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
             }
             
             /* Improve message bubble styling */
             .my-message {
                 background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
                 color: white;
-                margin-left: auto;
-                border-bottom-right-radius: 6px;
+                border-bottom-right-radius: 4px;
             }
             
             .other-message {
                 background: #f1f3f4;
                 color: #202124;
-                margin-right: auto;
-                border-bottom-left-radius: 6px;
+                border: 1px solid #e8eaed;
+                border-bottom-left-radius: 4px;
             }
             
             /* Date separator improvements */
@@ -1031,6 +1083,7 @@
             #message-form {
                 gap: 8px;
                 align-items: flex-end;
+                padding: 8px 12px;
             }
             
             .file-upload-area {
@@ -1039,22 +1092,27 @@
                 padding: 12px;
                 border-radius: 22px;
                 flex-shrink: 0;
+                touch-action: manipulation; /* Prevent double-tap zoom */
             }
             
             #message-input {
-                font-size: 16px;
+                font-size: 16px !important; /* Prevent zoom on iOS */
                 padding: 12px 16px;
                 min-height: 44px;
                 border-radius: 22px;
                 border: 1px solid #e5e7eb;
                 resize: none;
                 outline: none;
-                max-height: 150px;
-                line-height: 1.4;
-                font-family: inherit;
+                max-height: 120px; /* Slightly smaller on mobile */
+                line-height: 1.5;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 overflow-y: auto;
+                overflow-x: hidden;
                 white-space: pre-wrap;
                 word-wrap: break-word;
+                word-break: break-word;
+                -webkit-overflow-scrolling: touch;
+                box-sizing: border-box;
             }
             
             #message-input:focus {
@@ -1300,20 +1358,35 @@
             }
             
             #message-input {
-                font-size: 16px;
-                padding: 0.625rem 0.875rem;
+                font-size: 16px !important; /* Prevent zoom on mobile */
+                padding: 10px 14px;
+                min-height: 40px;
+                max-height: 100px; /* Smaller on very small screens */
+                line-height: 1.4;
             }
             
             .file-upload-area {
                 width: 40px;
                 height: 40px;
                 padding: 8px;
+                touch-action: manipulation;
             }
             
             .btn-primary {
                 padding: 0.625rem;
                 min-width: 40px;
                 min-height: 40px;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent;
+            }
+            
+            /* Better mobile input container */
+            #message-input-container {
+                padding: 8px 12px;
+            }
+            
+            #message-form {
+                gap: 6px;
             }
         }
         
@@ -1958,37 +2031,86 @@
             font-style: italic;
             color: #9ca3af;
         }
+        
+        /* Forwarded Message Styles */
+        .forwarded-message-header {
+            margin-bottom: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0.8;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .forwarded-message-header i {
+            font-size: 10px;
+        }
+        
+        .my-message .forwarded-message-header {
+            border-bottom-color: rgba(255, 255, 255, 0.2);
+        }
 
         .replied-message {
-            background: #f8fafc;
+            background: rgba(59, 130, 246, 0.08);
             border-left: 3px solid #3b82f6;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-bottom: 8px;
-            padding: 6px 10px;
-            max-width: 80%;
+            padding: 8px 12px;
+            max-width: 90%;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        
+        .replied-message:hover {
+            background: rgba(59, 130, 246, 0.12);
+        }
+        
+        .my-message .replied-message {
+            background: rgba(255, 255, 255, 0.2);
+            border-left-color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .my-message .replied-message:hover {
+            background: rgba(255, 255, 255, 0.25);
         }
 
         .replied-message-header {
             font-size: 11px;
             font-weight: 600;
             color: #3b82f6;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
+        }
+        
+        .my-message .replied-message-header {
+            color: rgba(255, 255, 255, 0.9);
         }
 
         .replied-message-content {
             font-size: 12px;
             color: #6b7280;
-            line-height: 1.3;
+            line-height: 1.4;
             max-height: 40px;
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
+        }
+        
+        .my-message .replied-message-content {
+            color: rgba(255, 255, 255, 0.8);
         }
 
         .replied-message-media {
             font-style: italic;
             color: #9ca3af;
+        }
+        
+        .my-message .replied-message-media {
+            color: rgba(255, 255, 255, 0.7);
         }
 
         .reply-indicator {
@@ -3701,7 +3823,7 @@
         // Make utility functions globally accessible for message rendering
         window.getFileIcon = getFileIcon;
         window.formatFileSize = formatFileSize;
-        
+        window.formatVoiceDuration = formatVoiceDuration;
         
         // Make blocking functions globally accessible
         window.closeBlockDialog = closeBlockDialog;
@@ -5708,7 +5830,14 @@
                                         <i class="fas fa-microphone text-sm opacity-70"></i>
                                         <span class="text-sm font-medium">Voice Message</span>
                                     </div>
-                                    
+                                    <audio controls class="w-full">
+                                        <source src="${voiceData.url}" type="audio/webm">
+                                        <source src="${voiceData.url}" type="audio/ogg">
+                                        Your browser does not support the audio element.
+                                    </audio>
+                                    <div class="voice-duration text-right">
+                                        ${formatVoiceDuration(voiceData.duration)}
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -5999,12 +6128,24 @@
         // Multiline message input support
         (function() {
             const messageInputElement = document.getElementById('message-input');
+            const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             
             // Auto-resize textarea as content grows
             messageInputElement.addEventListener('input', function() {
-                this.style.height = '44px'; // Reset to minimum
-                const newHeight = Math.min(this.scrollHeight, 150); // Max 150px
+                // Get the appropriate minimum height based on device
+                const minHeight = isMobileDevice ? 40 : 44;
+                const maxHeight = isMobileDevice ? (window.innerWidth < 400 ? 100 : 120) : 150;
+                
+                this.style.height = minHeight + 'px'; // Reset to minimum
+                const newHeight = Math.min(this.scrollHeight, maxHeight);
                 this.style.height = newHeight + 'px';
+                
+                // Ensure scrollbar appears when max height reached
+                if (this.scrollHeight > maxHeight) {
+                    this.style.overflowY = 'auto';
+                } else {
+                    this.style.overflowY = 'hidden';
+                }
             });
             
             // Handle Enter vs Shift+Enter
@@ -6017,6 +6158,24 @@
                 }
                 // Shift+Enter - allow default behavior (new line)
             });
+            
+            // Mobile-specific: Add visual feedback for multiline support
+            if (isMobileDevice) {
+                messageInputElement.setAttribute('placeholder', 'Type a message... (Shift+Enter for new line)');
+                
+                // Prevent iOS zoom on focus
+                messageInputElement.addEventListener('focus', function() {
+                    this.style.fontSize = '16px';
+                });
+                
+                // Handle mobile keyboard "Enter" button
+                messageInputElement.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter' && e.shiftKey) {
+                        // Allow Shift+Enter for new line on mobile keyboards
+                        e.stopPropagation();
+                    }
+                });
+            }
         })();
         
         // Dark mode toggle listener
@@ -6545,5 +6704,4 @@
     </script>
 </body>
 </html>
-
 
